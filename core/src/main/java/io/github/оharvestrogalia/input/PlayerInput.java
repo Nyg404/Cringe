@@ -1,4 +1,6 @@
-package io.github.оharvestrogalia.entity;
+package io.github.оharvestrogalia.input;
+
+import io.github.оharvestrogalia.entity.Player;
 
 public class PlayerInput {
     private final Player player;
@@ -9,21 +11,21 @@ public class PlayerInput {
         this.player = player;
     }
 
-    public void update(){
+    public void update() {
         boolean left = PlayerInputBind.isPressed(PlayerInputBind.Action.MOVE_LEFT);
         boolean right = PlayerInputBind.isPressed(PlayerInputBind.Action.MOVE_RIGHT);
         player.move(right, left);
 
-        // СБРОС jumpCount КОГДА КАСАЕМСЯ ЗЕМЛИ
+
         if (player.isOnGround() && !wasOnGround) {
-            jumpCount = 2;  // сбрасываем когда приземлились
+            jumpCount = 2;
         }
 
         wasOnGround = player.isOnGround();
 
-        // ОБРАБОТКА ПРЫЖКА
-        if(PlayerInputBind.justPressed(PlayerInputBind.Action.JUMP)){
-            if(jumpCount > 0){
+
+        if (PlayerInputBind.justPressed(PlayerInputBind.Action.JUMP)) {
+            if (jumpCount > 0) {
                 player.jump();
                 jumpCount -= 1;
             }

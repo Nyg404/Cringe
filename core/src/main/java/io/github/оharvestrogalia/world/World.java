@@ -1,108 +1,84 @@
 package io.github.оharvestrogalia.world;
 
-import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.graphics.OrthographicCamera;
-import com.badlogic.gdx.graphics.Texture;
-import com.badlogic.gdx.graphics.g2d.SpriteBatch;
-import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.maps.MapLayer;
-import com.badlogic.gdx.maps.MapLayers;
 import com.badlogic.gdx.maps.MapObject;
-import com.badlogic.gdx.maps.MapObjects;
 import com.badlogic.gdx.maps.objects.RectangleMapObject;
 import com.badlogic.gdx.maps.tiled.TiledMap;
-import com.badlogic.gdx.maps.tiled.TiledMapRenderer;
-import com.badlogic.gdx.maps.tiled.TmjMapLoader;
 import com.badlogic.gdx.maps.tiled.TmxMapLoader;
-import com.badlogic.gdx.maps.tiled.objects.TiledMapTileMapObject;
 import com.badlogic.gdx.maps.tiled.renderers.OrthogonalTiledMapRenderer;
 import com.badlogic.gdx.math.Rectangle;
-import io.github.оharvestrogalia.entity.Player;
+import io.github.оharvestrogalia.world.CollisionProvider;
 
-import java.awt.*;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 
-public class World implements CollisionProvider{
-    private List<Rectangle> collision = new ArrayList<>();
+public class World implements CollisionProvider {
     private TiledMap map;
-    private TiledMapRenderer  render;
-
-    public List<Rectangle> getCollision() {
-        return collision;
-    }
-
+    private OrthogonalTiledMapRenderer renderer;
     private OrthographicCamera camera;
-    private SpriteBatch batch;
+    private List<Rectangle> collisionObjects = new ArrayList<>();
 
-
-    public World(OrthographicCamera camera, SpriteBatch batch){
+    public World(OrthographicCamera camera) {
         this.camera = camera;
-        this.batch = batch;
-    }
-   public void loadMap(){
-       map = new TmxMapLoader().load("test.tmx");
-       render = new OrthogonalTiledMapRenderer(map);
-       addCollisionMaps();
-   }
-
-    public void renderWorld(){
-        render.setView(camera);
-        render.render();
-        renderObjectsAuto();
-
     }
 
-    private void renderObjectsAuto() {
-        batch.setProjectionMatrix(camera.combined);
-        batch.begin();
-
-        MapLayer objectLayer = map.getLayers().get("coll");
-        for (MapObject object : objectLayer.getObjects()) {
-            if (object instanceof TiledMapTileMapObject) {
-                TiledMapTileMapObject tileObj = (TiledMapTileMapObject) object;
-
-                TextureRegion texture = tileObj.getTile().getTextureRegion();
-                float x = tileObj.getX();
-                float y = tileObj.getY();
-                float width = tileObj.getProperties().get("width", Float.class);
-                float height = tileObj.getProperties().get("height", Float.class);
-
-                batch.draw(texture, x, y, width, height);
-            }
+    public void loadMap(String mapPath) {
+        if (map != null) {
+            map.dispose();
+            collisionObjects.clear();
         }
 
-        batch.end();
+        map = new TmxMapLoader().load(mapPath);
+        renderer = new OrthogonalTiledMapRenderer(map);
+        loadCollisionObjects(); // Загружаем коллизии при загрузке карты
     }
 
-    private void addCollisionMaps(){
-        MapLayer mapLayer = map.getLayers().get("collision");
-        if (mapLayer == null) return;
+    public void renderWorld() {
+        if (renderer != null) {
+            renderer.setView(camera);
+            renderer.render(); // рендерим все тайлы
+        }
+    }
 
-        for (MapObject object : mapLayer.getObjects()){
-            if(object instanceof RectangleMapObject){
-                RectangleMapObject rectObj = (RectangleMapObject) object;
-                Rectangle rect = rectObj.getRectangle();
+    private void loadCollisionObjects() {
+        collisionObjects.clear();
+        MapLayer collisionLayer = map.getLayers().get("collision");
 
-                // ПРОСТО КОПИРУЕМ ПРЯМО ИЗ TILED!
-                collision.add(new Rectangle(rect));
+        if (collisionLayer != null) {
+            for (MapObject object : collisionLayer.getObjects()) {
+                if (object instanceof RectangleMapObject) {
+                    Rectangle rect = ((RectangleMapObject) object).getRectangle();
+                    collisionObjects.add(new Rectangle(rect));
+                }
             }
         }
     }
 
+    public void dispose() {
+        if (map != null) {
+            map.dispose();
+        }
+        collisionObjects.clear();
+    }
+
+    // CollisionProvider implementation
     @Override
     public List<Rectangle> getCollisionObjects() {
-        return getCollision();
+        return collisionObjects;
     }
 
     @Override
     public boolean isColliding(Rectangle bounds) {
-        for (Rectangle collider : getCollision()) {
+        for (Rectangle collider : collisionObjects) {
             if (collider.overlaps(bounds)) {
                 return true;
             }
         }
         return false;
+    }
+
+    public TiledMap getMap() {
+        return map;
     }
 }

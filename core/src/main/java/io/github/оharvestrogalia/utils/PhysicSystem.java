@@ -1,99 +1,133 @@
 package io.github.оharvestrogalia.utils;
 
-import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.math.Rectangle;
 import com.badlogic.gdx.math.Vector2;
-import io.github.оharvestrogalia.entity.Player;
 import io.github.оharvestrogalia.world.World;
 
-import java.util.ArrayList;
-import java.util.List;
-
 public class PhysicSystem {
-    public List<Rectangle> rectangleList = new ArrayList<>();
+    private final World world;
 
-    public PhysicSystem(World world){
-        this.rectangleList.addAll(world.getCollision());
+    public PhysicSystem(World world) {
+        this.world = world;
     }
 
     public CollisionResult resolveMovement(PhysicsEntity entity, Vector2 desiredMovement) {
-        Rectangle originalBounds = entity.getBounds();
+        Rectangle bounds = entity.getBounds();
         Vector2 allowed = new Vector2(desiredMovement);
 
-        // Разрешаем движение по осям
-        allowed = resolveAxis(allowed, originalBounds, true); // X
-        allowed = resolveAxis(allowed, originalBounds, false); // Y
+
+        allowed.y = resolveVertical(bounds, desiredMovement.y);
+
+        Rectangle movedY = new Rectangle(
+            bounds.x,
+            bounds.y + allowed.y,
+            bounds.width,
+            bounds.height
+        );
+
+        // Потом горизонталь
+        allowed.x = resolveHorizontal(movedY, desiredMovement.x);
+
+        Rectangle finalBounds = new Rectangle(
+            bounds.x + allowed.x,
+            bounds.y + allowed.y,
+            bounds.width,
+            bounds.height
+        );
 
         // Определяем тип коллизии
-        boolean onGround = isOnGround(new Rectangle(
-            originalBounds.x + allowed.x,
-            originalBounds.y + allowed.y,
-            originalBounds.width,
-            originalBounds.height
-        ));
-
+        boolean onGround = isOnGround(finalBounds);
         boolean hitCeiling = (allowed.y < desiredMovement.y && desiredMovement.y > 0);
-        boolean hitWall = (allowed.x < desiredMovement.x);
-
-        // УБЕРИТЕ этот блок - сброс скорости должен быть в классе Player
-        // if (onGround && desiredMovement.y < 0) {
-        //     // Можно также сбросить velocity в entity здесь
-        // }
+        boolean hitWall = (Math.abs(allowed.x) < Math.abs(desiredMovement.x));
 
         return new CollisionResult(allowed, onGround, hitCeiling, hitWall);
     }
 
-    private Vector2 resolveAxis(Vector2 movement, Rectangle originalBounds, boolean isXAxis) {
-        if (isXAxis && movement.x == 0) return movement;
-        if (!isXAxis && movement.y == 0) return movement;
+    private float resolveVertical(Rectangle bounds, float dy) {
+        if (dy == 0) return 0;
 
-        Rectangle testBounds = new Rectangle(originalBounds);
-        float step = isXAxis ? movement.x : movement.y;
-        float direction = Math.signum(step);
-        float remaining = Math.abs(step);
+        int direction = dy > 0 ? 1 : -1;
+        float remaining = Math.abs(dy);
         float moved = 0;
 
         // Пошаговое движение с проверкой коллизий
         while (remaining > 0) {
-            testBounds.set(originalBounds);
+            float step = Math.min(remaining, 1.0f); // Шаг в 1 пиксель
 
-            if (isXAxis) {
-                testBounds.x += (moved + 1) * direction;
-            } else {
-                testBounds.y += (moved + 1) * direction;
+            Rectangle test = new Rectangle(
+                bounds.x,
+                bounds.y + moved + (step * direction),
+                bounds.width,
+                bounds.height
+            );
+
+            if (world.isColliding(test)) {
+                // При падении ищем точную позицию земли
+                if (direction < 0) {
+                    return findExactGroundPosition(bounds, moved);
+                }
+                break; // При прыжке просто останавливаемся
             }
 
-            if (checkCollision(testBounds)) {
+            moved += step * direction;
+            remaining -= step;
+        }
+
+        return moved;
+    }
+
+    private float resolveHorizontal(Rectangle bounds, float dx) {
+        if (dx == 0) return 0;
+
+        int direction = dx > 0 ? 1 : -1;
+        float remaining = Math.abs(dx);
+        float moved = 0;
+
+        // Пошаговое движение по горизонтали
+        while (remaining > 0) {
+            float step = Math.min(remaining, 1.0f);
+
+            Rectangle test = new Rectangle(
+                bounds.x + moved + (step * direction),
+                bounds.y,
+                bounds.width,
+                bounds.height
+            );
+
+            if (world.isColliding(test)) {
                 break;
             }
 
-            moved += 1;
-            remaining -= 1;
+            moved += step * direction;
+            remaining -= step;
         }
 
-        Vector2 result = new Vector2(movement);
-        if (isXAxis) {
-            result.x = moved * direction;
-        } else {
-            result.y = moved * direction;
-        }
-
-        return result;
+        return moved;
     }
 
-    private boolean isOnGround(Rectangle bounds) {
-        // Проверяем коллизию на 2 пикселя ниже для надежности
-        Rectangle groundCheck = new Rectangle(bounds);
-        groundCheck.y -= 2;
-        return checkCollision(groundCheck);
-    }
+    private float findExactGroundPosition(Rectangle bounds, float currentMoved) {
+        float groundY = bounds.y + currentMoved;
 
-    private boolean checkCollision(Rectangle bounds) {
-        for (Rectangle collider : rectangleList) {
-            if (collider.overlaps(bounds)) {
-                return true;
+        // Проверяем точку коллизии
+        for (Rectangle collider : world.getCollisionObjects()) {
+            if (collider.overlaps(new Rectangle(bounds.x, groundY, bounds.width, bounds.height))) {
+                // ставим игрока ровно на верх коллайдера
+                return collider.y + collider.height - bounds.y;
             }
         }
-        return false;
+
+        return currentMoved;
+    }
+
+
+    private boolean isOnGround(Rectangle bounds) {
+        // Проверяем, есть ли земля под ногами (1 пиксель ниже)
+        Rectangle groundCheck = new Rectangle(
+            bounds.x,
+            bounds.y - 1,
+            bounds.width,
+            1
+        );
+        return world.isColliding(groundCheck);
     }
 }
